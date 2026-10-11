@@ -1642,14 +1642,7 @@ def complete_scan_locked(
     return context
 
 
-def register_cli_scan(
-    connection: sqlite3.Connection,
-    args: argparse.Namespace,
-    *,
-    before_archive: Callable[[], None] | None = None,
-) -> dict[str, Any]:
-    repository = require_target(args.repository)
-    require_scannable_target(repository)
+def require_cli_scan_directory(repository: Path, args: argparse.Namespace) -> Path:
     scan_dir = require_canonical_scan_directory(Path(args.scan_dir).expanduser())
     if scan_dir == repository or repository in scan_dir.parents or scan_dir in repository.parents:
         raise SystemExit(
@@ -1659,7 +1652,21 @@ def register_cli_scan(
         scan_dir.iterdir(), None
     ) is not None:
         raise SystemExit("The scan artifact directory must be empty before the scan starts.")
+    return scan_dir
 
+
+def register_cli_scan(
+    connection: sqlite3.Connection,
+    args: argparse.Namespace,
+    *,
+    before_archive: Callable[[], None] | None = None,
+) -> dict[str, Any]:
+    repository = require_target(args.repository)
+    require_scannable_target(repository)
+    scan_dir = None
+    if not args.archive_existing or args.archived_scan_dir is not None:
+        # Preserve early output rejection when this call will not move the directory.
+        scan_dir = require_cli_scan_directory(repository, args)
     user_context = None
     workflow_id = None
     if args.registration_json_stdin:
@@ -1710,6 +1717,10 @@ def register_cli_scan(
 
     connection.execute("BEGIN IMMEDIATE")
     try:
+        if scan_dir is None:
+            # Host archiving temporarily removes the output directory. Wait for
+            # the existing writer before inspecting its replacement.
+            scan_dir = require_cli_scan_directory(repository, args)
         with archive_scan(
             connection,
             args,
