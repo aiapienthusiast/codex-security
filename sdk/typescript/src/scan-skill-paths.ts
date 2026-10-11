@@ -1,7 +1,8 @@
 import { readdir } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { join } from "node:path";
 import { resolveCodexProfile, type JsonObject } from "./config.js";
 import { isRecord } from "./record.js";
+import { isWithin } from "./trusted-executable.js";
 
 /** Keep native skill injection out of the denied credential home. The scan
  * prompt loads the same workflow from CODEX_SECURITY_PLUGIN_ROOT instead. */
@@ -10,17 +11,7 @@ export async function scanSkillConfig(
   plugin: { pluginRoot: string; installedRoot: string },
   credentialHome: string,
 ): Promise<JsonObject> {
-  const installed = relative(
-    resolve(credentialHome),
-    resolve(plugin.installedRoot),
-  );
-  if (
-    isAbsolute(installed) ||
-    installed === ".." ||
-    installed.startsWith(`..${sep}`)
-  ) {
-    return config;
-  }
+  if (!isWithin(credentialHome, plugin.installedRoot)) return config;
   const skills = await readdir(join(plugin.pluginRoot, "skills"), {
     withFileTypes: true,
   }).catch((error: NodeJS.ErrnoException) => {
@@ -35,23 +26,15 @@ export async function scanSkillConfig(
       ),
   );
   if (paths.size === 0) return config;
-  const resolved = resolveCodexProfile(config);
+  const configured = resolveCodexProfile(config)["skills"];
   // Leave malformed user settings intact so native configuration reports them.
-  if (resolved["skills"] !== undefined && !isRecord(resolved["skills"]))
-    return config;
-  const configured = isRecord(resolved["skills"]) ? resolved["skills"] : {};
-  if (
-    configured["config"] !== undefined &&
-    !Array.isArray(configured["config"])
-  )
-    return config;
-  const entries = Array.isArray(configured["config"])
-    ? configured["config"]
-    : [];
+  if (configured !== undefined && !isRecord(configured)) return config;
+  const entries = configured?.["config"];
+  if (entries !== undefined && !Array.isArray(entries)) return config;
   const selection = {
     ...configured,
     config: [
-      ...entries.filter(
+      ...(entries ?? []).filter(
         (entry) => !isRecord(entry) || !paths.has(String(entry["path"])),
       ),
       ...Array.from(paths, (path) => ({ path, enabled: false })),
