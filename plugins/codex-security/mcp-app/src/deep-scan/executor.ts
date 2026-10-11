@@ -519,6 +519,7 @@ async function workerRuntimeSettings(
       "service_tier",
       "analytics",
       "responses_api_metadata",
+      "skills",
     ].map((key) => [key, selected[key]]),
   );
   const settings: CodexSdkWorkerRuntimeSettings = { config: inherited };

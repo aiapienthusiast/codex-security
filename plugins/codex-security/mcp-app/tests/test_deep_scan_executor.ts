@@ -1471,6 +1471,33 @@ env_key = "SYNTHETIC_GATEWAY_KEY"`,
                 : "elevated";
           const webSearch =
             index === 0 ? undefined : ["disabled", "cached", "live"][index % 3];
+          const skills =
+            index === 0 && configuration === ""
+              ? undefined
+              : {
+                  config: [
+                    {
+                      path: path.join(
+                        codexHome,
+                        "plugins",
+                        `scan-${index}`,
+                        "skills",
+                        "security-scan",
+                        "SKILL.md",
+                      ),
+                      enabled: false,
+                    },
+                    {
+                      path: path.join(
+                        fixture.root,
+                        "other skills",
+                        `scan-${index}`,
+                        "SKILL.md",
+                      ),
+                      enabled: true,
+                    },
+                  ],
+                };
           // Cover missing settings, native config inheritance, and snapshot overrides.
           const mergeProfileTelemetry = index === 0 && configuration !== "";
           const telemetry =
@@ -1627,12 +1654,32 @@ env_key = "SYNTHETIC_GATEWAY_KEY"`,
                     set: { SYNTHETIC_SHELL_MARKER: `scan-${index}` },
                   },
             webSearch,
+            skills,
             features,
             telemetry,
             workerTelemetry: overrideTelemetry ? telemetry : {},
             configuration: {
               ...parsedConfiguration,
               ...inheritedTelemetry,
+              ...(skills === undefined
+                ? {}
+                : {
+                    skills:
+                      index === 1 || index === 4 || mergeProfileTelemetry
+                        ? {
+                            config: [
+                              {
+                                path: path.join(
+                                  fixture.root,
+                                  "overridden",
+                                  "SKILL.md",
+                                ),
+                                enabled: false,
+                              },
+                            ],
+                          }
+                        : skills,
+                  }),
               ...(index === 0
                 ? {}
                 : { service_tier: index === 2 ? "flex" : serviceTier }),
@@ -1646,6 +1693,9 @@ env_key = "SYNTHETIC_GATEWAY_KEY"`,
                       ...profiles,
                       selected: {
                         ...profiles.selected,
+                        ...(index === 4 || mergeProfileTelemetry
+                          ? { skills }
+                          : {}),
                         ...(index === 2 ? { service_tier: serviceTier } : {}),
                         ...(index === 4 ? telemetry : {}),
                         ...(mergeProfileTelemetry
@@ -1684,6 +1734,9 @@ env_key = "SYNTHETIC_GATEWAY_KEY"`,
                 worker_runtime: {
                   ...entry.authentication,
                   ...entry.workerTelemetry,
+                  ...(entry.skills === undefined
+                    ? {}
+                    : { skills: entry.skills }),
                   ...(entry.endpoint === undefined
                     ? {}
                     : { openai_base_url: entry.endpoint }),
@@ -1946,6 +1999,19 @@ env_key = "SYNTHETIC_GATEWAY_KEY"`,
               web_search: workerConfigurations[index].webSearch,
               "windows.sandbox": workerConfigurations[index].windowsSandbox,
             });
+            assert.deepEqual(
+              JSON.parse(
+                JSON.stringify(
+                  parseToml(
+                    nativeConfigOverrides(invocation.argv)
+                      .filter((override) => /^skills[.=]/.test(override))
+                      .join("\n"),
+                  ),
+                ),
+              )["skills"],
+              workerConfigurations[index].skills,
+              "Discovery, reducer and resumed concurrent launches retain their own skill selection.",
+            );
             assert.deepEqual(
               JSON.parse(
                 JSON.stringify(

@@ -229,6 +229,7 @@ const allowedFiles = new Set([
     "deduplication/review",
     "saved-scan",
     "saved-scan-bootstrap",
+    "scan-skill-paths",
     "server/embeddings",
     "server/errors",
     "server/sqlite-store",
