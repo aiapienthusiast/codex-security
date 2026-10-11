@@ -1870,6 +1870,12 @@ env_key = "SYNTHETIC_GATEWAY_KEY"`,
                 workerRequest(promptPath, fixture.root, {
                   kind,
                   resumeThreadId,
+                  ...(resumeThreadId
+                    ? {
+                        continuationPrompt:
+                          "synthetic worker configuration fixture\nsynthetic resumed worker context",
+                      }
+                    : {}),
                   artifactContext: {
                     root: fixture.root,
                     layout: kind === "dedup" ? "reducer" : "worker",
@@ -2098,6 +2104,29 @@ env_key = "SYNTHETIC_GATEWAY_KEY"`,
                   arg.includes("synthetic-header-") ||
                   arg.includes("synthetic-bearer-") ||
                   arg.includes("synthetic-client-secret-"),
+              ),
+              false,
+            );
+            assert.ok(
+              invocation.stdin.includes(
+                JSON.stringify(
+                  path.join(fixture.root, `plugin-${index}`, "skills"),
+                ),
+              ),
+            );
+            assert.ok(invocation.stdin.includes("<skill-name>/SKILL.md"));
+            assert.ok(
+              invocation.stdin.includes(
+                resumeThreadId
+                  ? "synthetic resumed worker context"
+                  : "synthetic worker configuration fixture",
+              ),
+            );
+            assert.equal(
+              invocation.stdin.includes(
+                JSON.stringify(
+                  path.join(fixture.root, "ambient-plugin", "skills"),
+                ),
               ),
               false,
             );

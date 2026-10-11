@@ -4145,6 +4145,7 @@ function scanPrompt(
     "Use [$codex-security](mcp://codex-security) for this scan's artifact tools.",
     discoveryPrompt ??
       `Read ${shellEnvironmentReference("CODEX_SECURITY_PLUGIN_ROOT", `/skills/${skillName}/SKILL.md`)} and follow that ${skillName} workflow. Resolve all of its plugin-relative references and helpers from ${shellEnvironmentReference("CODEX_SECURITY_PLUGIN_ROOT")}. This is the readable copy of the selected plugin; its installed cache under CODEX_HOME is intentionally denied.`,
+    `For a Codex Security skill invoked by the assigned workflow, remove any codex-security: prefix from its name, read ${shellEnvironmentReference("CODEX_SECURITY_PLUGIN_ROOT", "/skills/<skill-name>/SKILL.md")}, and follow that file. Resolve its relative references from its directory. Give delegated workers the same readable skill paths. Load only skills required by the assigned workflow.`,
     "Run this Codex Security scan non-interactively.",
     ...(modelProvider === "amazon-bedrock"
       ? [

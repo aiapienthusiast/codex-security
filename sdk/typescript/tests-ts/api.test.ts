@@ -6369,6 +6369,12 @@ describe("CodexSecurity orchestration", () => {
                   ),
                 );
                 expect(prompt).not.toContain("$codex-security:");
+                expect(prompt).toContain(
+                  shellEnvironmentReference(
+                    "CODEX_SECURITY_PLUGIN_ROOT",
+                    "/skills/<skill-name>/SKILL.md",
+                  ),
+                );
                 expect(options.env?.["CODEX_SECURITY_PLUGIN_ROOT"]).toBe(
                   PLUGIN_ROOT,
                 );
@@ -6892,6 +6898,12 @@ describe("CodexSecurity orchestration", () => {
       ),
     );
     expect(prompt()).not.toContain("$codex-security:");
+    expect(prompt()).toContain(
+      shellEnvironmentReference(
+        "CODEX_SECURITY_PLUGIN_ROOT",
+        "/skills/<skill-name>/SKILL.md",
+      ),
+    );
     expect(prompt()).toContain("record_codex_security_scan_draft");
     expect(prompt()).toContain("complete_codex_security_scan");
     expect(prompt()).not.toContain("do not finalize or seal them");
