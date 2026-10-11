@@ -373,6 +373,8 @@ const PROVIDER_OPTION = z
   .enum(["openai", "openrouter", "fireworks", "amazon-bedrock"])
   .default("openai")
   .describe("Inference provider for scans.");
+const positiveInteger = z.number().int().positive();
+
 const SHOW_COST_OPTION = z
   .boolean()
   .default(false)
@@ -1748,12 +1750,8 @@ export async function main(
   const frameworkCapture = captureOutput();
   let rawExportOutput = false;
   let streamedLogs: Awaited<ReturnType<typeof readSavedScanLogs>> | undefined;
-  let renderedHistory: string | undefined;
-  let renderedPublication: string | undefined;
-  let renderedPolicy: string | undefined;
-  let renderedPatch: string | undefined;
-  let patchStructuredError = false;
-  let scanStructuredError = false;
+  let renderedOutput: string | undefined;
+  let structuredError = false;
   let incompleteScanOutput:
     { format: "json" | "jsonl"; message: string } | undefined;
   const recordIncompleteScanOutput = (outcome: ScanOutcome, format: string) => {
@@ -1767,7 +1765,6 @@ export async function main(
   };
   let filteredScanFailure:
     { format: string; data: Record<string, unknown> } | undefined;
-  let renderedScanFailure: string | undefined;
   const finishScan = (
     outcome: ScanOutcome,
     format: string,
@@ -1792,7 +1789,7 @@ export async function main(
         return data;
       }
       // Incur would wrap returned data in an ok: true envelope.
-      scanStructuredError = true;
+      structuredError = true;
       return incurError({ code, message, exitCode });
     }
     return incurError({ code, message: outcome.error, exitCode });
@@ -1946,7 +1943,7 @@ export async function main(
     ) {
       return result;
     }
-    renderedHistory = renderScanHistory(result, command, {
+    renderedOutput = renderScanHistory(result, command, {
       columns: output.columns,
       color:
         dependencies.environment["NO_COLOR"] === undefined &&
@@ -3180,7 +3177,7 @@ export async function main(
           !options.dryRun &&
           !argv.some((argument) => OUTPUT_OPTION.test(argument))
         ) {
-          renderedPublication = renderPublicationSummary(
+          renderedOutput = renderPublicationSummary(
             result,
             output.isTTY === true &&
               dependencies.environment["NO_COLOR"] === undefined &&
@@ -3268,7 +3265,7 @@ export async function main(
         z.object({
           source: z.literal("github-code-scanning"),
           repository: z.string(),
-          number: z.number().int().positive(),
+          number: positiveInteger,
           url: z.string(),
           alert: z.record(z.string(), z.unknown()),
         }),
@@ -3485,7 +3482,7 @@ export async function main(
             outcome.markdown !== undefined &&
             !filterOutput
           ) {
-            if (!transformOutput) renderedPolicy = outcome.markdown;
+            if (!transformOutput) renderedOutput = outcome.markdown;
             return outcome.markdown;
           }
           return format === "toon" && !explicitOutput && !options.dryRun
@@ -4001,10 +3998,7 @@ export async function main(
       destructive: true,
       mcp: false,
       options: z.object({
-        concurrency: z
-          .number()
-          .int()
-          .positive()
+        concurrency: positiveInteger
           .default(DEFAULT_DEDUPE_CONCURRENCY)
           .describe(
             "Maximum concurrent dedupe jobs across Luna and Sol; use 1 for serial execution.",
@@ -4225,10 +4219,7 @@ export async function main(
           outputDir: optionValue("--output-dir")
             .optional()
             .describe("Empty results directory outside the repository."),
-          workers: z
-            .number()
-            .int()
-            .positive()
+          workers: positiveInteger
             .default(4)
             .describe(
               "Concurrent component scans; deep workers are configured per scan.",
@@ -4464,10 +4455,7 @@ export async function main(
           .optional()
           .meta({ default: [] })
           .describe("Read shared security docs for every repository."),
-        workers: z
-          .number()
-          .int()
-          .positive()
+        workers: positiveInteger
           .default(4)
           .describe(
             "Concurrent repository scans. Per-scan Codex workers are separate.",
@@ -4490,10 +4478,7 @@ export async function main(
           `OpenAI model for each repository (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.model}).`,
         ).shape,
         provider: PROVIDER_OPTION,
-        maxAttempts: z
-          .number()
-          .int()
-          .positive()
+        maxAttempts: positiveInteger
           .default(1)
           .describe("Maximum scan attempts per repository."),
         maxCost: ScanSettingsSchema.shape.maxCostUsd.describe(
@@ -5480,14 +5465,14 @@ export async function main(
           const message = errorMessage(error);
           errorOutput.write(`codex-security: ${diagnosticValue(message)}\n`);
           if (!structuredOutput) return;
-          patchStructuredError = true;
+          structuredError = true;
           const failure = {
             code:
               error instanceof PatchCommandError ? error.code : "PATCH_FAILED",
             message,
           };
           if (!fullOutput) {
-            renderedPatch =
+            renderedOutput =
               JSON.stringify({
                 ok: false,
                 ...patchResult,
@@ -6177,12 +6162,12 @@ export async function main(
         stdout: failureOutput.stream.write,
         exit: () => undefined,
       });
-    renderedScanFailure = failureOutput.text();
+    renderedOutput = failureOutput.text();
   }
   let frameworkOutput = frameworkCapture.text();
   if (notice !== undefined) errorOutput.write(formatUpdateNotice(notice));
   if (frameworkExit !== undefined) {
-    if (policyFullOutput || patchStructuredError || scanStructuredError) {
+    if (policyFullOutput || structuredError) {
       if (exitCode === 0) exitCode = 2;
     } else {
       if (exitCode !== 0) return exitCode;
@@ -6196,7 +6181,7 @@ export async function main(
   if (
     frameworkOutput.length === 0 &&
     streamedLogs === undefined &&
-    renderedScanFailure === undefined
+    filteredScanFailure === undefined
   )
     return exitCode;
   try {
@@ -6229,11 +6214,7 @@ export async function main(
     await writeCliOutput(
       output,
       logOutput ??
-        renderedScanFailure ??
-        renderedPolicy ??
-        renderedPatch ??
-        renderedPublication ??
-        renderedHistory ??
+        renderedOutput ??
         formatCliHelp(frameworkOutput, output.columns),
     );
     return exitCode;
@@ -7388,10 +7369,9 @@ async function runFindingPatches(
           : [];
         const matches = entries.filter(
           (entry) =>
-            typeof entry === "object" &&
-            entry !== null &&
+            isJsonObject(entry) &&
             "occurrenceId" in entry &&
-            entry.occurrenceId === finding.occurrenceId,
+            entry["occurrenceId"] === finding.occurrenceId,
         );
         const parsed = findingPatchSchema.safeParse(matches[0]);
         if (matches.length !== 1 || !parsed.success) {
@@ -8015,24 +7995,16 @@ export async function readSkillCommandOutput(
     if (value["type"] === "item.completed") {
       const item = value["item"];
       if (
-        typeof item === "object" &&
-        item !== null &&
-        "type" in item &&
-        item.type === "agent_message" &&
-        "text" in item &&
-        typeof item.text === "string"
+        isJsonObject(item) &&
+        item["type"] === "agent_message" &&
+        typeof item["text"] === "string"
       ) {
-        message = item.text;
+        message = item["text"];
       }
     } else if (value["type"] === "turn.failed") {
       const detail = value["error"];
-      if (
-        typeof detail === "object" &&
-        detail !== null &&
-        "message" in detail &&
-        typeof detail.message === "string"
-      ) {
-        error = detail.message;
+      if (isJsonObject(detail) && typeof detail["message"] === "string") {
+        error = detail["message"];
       }
     } else if (
       value["type"] === "error" &&

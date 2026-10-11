@@ -2774,10 +2774,7 @@ export class CodexSecurity {
     await this.close();
   }
 
-  async #authentication(): Promise<{
-    codexHome: string;
-    environment: Record<string, string>;
-  }> {
+  async #authentication() {
     this.#requireOpen();
     const environment = selectedScanEnvironment(
       this.#runtime?.environment ?? this.#dependencies.environment,

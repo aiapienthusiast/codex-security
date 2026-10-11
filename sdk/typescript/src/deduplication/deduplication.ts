@@ -1,3 +1,4 @@
+import { SCAN_SEVERITIES } from "../scan-settings.js";
 import { findingGroupRoots } from "../finding-catalogue.js";
 import type { Finding } from "../models.js";
 import type { FindingNeighborhood } from "../finding-retrieval.js";
@@ -84,13 +85,9 @@ export interface DeduplicationResult {
   refusals?: DeduplicationRefusal[];
 }
 
-const severityOrder: Record<Finding["severity"]["level"], number> = {
-  critical: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-  informational: 4,
-};
+const severityOrder = Object.fromEntries(
+  SCAN_SEVERITIES.map((severity, index) => [severity, index]),
+) as Record<(typeof SCAN_SEVERITIES)[number], number>;
 
 /** @internal */
 export interface ContradictionGroupingMetrics {
