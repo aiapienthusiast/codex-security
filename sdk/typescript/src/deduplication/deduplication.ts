@@ -85,10 +85,6 @@ export interface DeduplicationResult {
   refusals?: DeduplicationRefusal[];
 }
 
-const severityOrder = Object.fromEntries(
-  SCAN_SEVERITIES.map((severity, index) => [severity, index]),
-) as Record<(typeof SCAN_SEVERITIES)[number], number>;
-
 /** @internal */
 export interface ContradictionGroupingMetrics {
   candidateEvaluations: number;
@@ -370,8 +366,8 @@ export class FindingDeduplicator {
         if (!groupMembers.some((member) => selected.has(member))) continue;
         groupMembers.sort(
           (left, right) =>
-            severityOrder[findings.get(left)!.severity.level] -
-              severityOrder[findings.get(right)!.severity.level] ||
+            SCAN_SEVERITIES.indexOf(findings.get(left)!.severity.level) -
+              SCAN_SEVERITIES.indexOf(findings.get(right)!.severity.level) ||
             (left < right ? -1 : left > right ? 1 : 0),
         );
         duplicateGroups.push(groupMembers);
