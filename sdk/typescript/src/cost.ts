@@ -88,6 +88,8 @@ function createSessionUsage() {
     inheritedUsage: null as ScanTokenUsage | null,
     replaying: false,
     usage: null as ScanTokenUsage | null,
+    responseUsage: null as ScanTokenUsage | null,
+    responseIds: new Set<string>(),
     calls: new Map<string, ScanActivity>(),
     activities: [] as ScanActivity[],
     progress: [] as ScanProgress[],
@@ -502,6 +504,34 @@ function readSessionEvent(
     return;
   }
   session.events?.push(event);
+  if (event["type"] === "token_usage_record") {
+    const responseId = payload["response_id"];
+    if (
+      payload["thread_id"] !== session.threadId ||
+      typeof responseId !== "string" ||
+      session.responseIds.has(responseId)
+    ) {
+      return;
+    }
+    const usage = tokenUsage(payload["usage"]);
+    if (usage === null) return;
+    session.responseIds.add(responseId);
+    session.responseUsage = addTokenUsage(session.responseUsage, usage);
+    // Native thread totals include compaction and any earlier turns. They are
+    // scoped to thread_id, unlike inherited legacy token_count snapshots.
+    const total = tokenUsage(payload["thread_token_usage"]);
+    const recorded =
+      total !== null && total.total_tokens >= session.responseUsage.total_tokens
+        ? total
+        : session.responseUsage;
+    if (
+      session.usage === null ||
+      recorded.total_tokens >= session.usage.total_tokens
+    ) {
+      session.usage = recorded;
+    }
+    return;
+  }
   if (event["type"] === "response_item") {
     session.progress.push(...sessionProgressUpdates(payload));
     if (repository === undefined) return;
@@ -630,7 +660,17 @@ function readSessionEvent(
     session.inheritedUsage === null
       ? usage
       : subtractTokenUsage(usage, session.inheritedUsage);
-  if (ownUsage !== null) session.usage = ownUsage;
+  // Older runtimes only emit token_count. In newer rollouts these snapshots can
+  // lag compaction receipts, so do not replace a more complete native total.
+  if (
+    ownUsage !== null &&
+    (session.usage === null ||
+      ownUsage.total_tokens > session.usage.total_tokens ||
+      (session.responseUsage === null &&
+        ownUsage.total_tokens === session.usage.total_tokens))
+  ) {
+    session.usage = ownUsage;
+  }
 }
 
 function readSessionReasoning(
