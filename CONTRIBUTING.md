@@ -22,6 +22,10 @@ are generated compatibility resources for JSON consumers. After editing the cont
 run `node plugins/codex-security/mcp-app/scripts/generate-artifact-schemas.mjs`.
 The MCP `typecheck` command checks that the generated resources are current.
 
+`pnpm --dir sdk/typescript run generate:models` also copies shared finding
+normalization from the plugin source into the SDK. Edit the plugin helper, then
+regenerate its SDK copy. `pnpm --dir sdk/typescript run types` checks freshness.
+
 Model-based evaluations live in [`evals/`](evals/README.md), outside the plugin
 source. Deterministic triage checks and the MCP reducer IPC regression remain
 part of normal CI.
