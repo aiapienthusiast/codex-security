@@ -185,21 +185,12 @@ def test_registration_waits_for_in_progress_archive_rename(workflow_scan, monkey
 
     def competing_registration():
         other = module["connect"]()
-
-        class ObserveWriterAdmission:
-            def __getattr__(self, name):
-                return getattr(other, name)
-
-            def execute(self, sql, *parameters):
-                if sql == "BEGIN IMMEDIATE":
-                    attempted.set()
-                return other.execute(sql, *parameters)
-
+        other.set_trace_callback(lambda sql: attempted.set() if sql == "BEGIN IMMEDIATE" else None)
         try:
             ready.set()
             assert renamed.wait(5)
             with pytest.raises(SystemExit) as error:
-                module["register_cli_scan"](ObserveWriterAdmission(), args)
+                module["register_cli_scan"](other, args)
             return str(error.value)
         finally:
             attempted.set()
